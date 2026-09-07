@@ -184,7 +184,6 @@ function renderDex() {
     if (ql && !m.name.toLowerCase().includes(ql) && String(m.no) !== ql) continue;
     if (S.dexType && !monTypes(m).includes(S.dexType)) continue;
     html += monRow(m, `<div class="rt" style="color:var(--dim);font-weight:700;font-size:.8rem">#${String(m.no).padStart(3, '0')}</div>`); n++;
-    if (n >= 200) { html += `<div class="empty">Showing first 200 — narrow the search.</div>`; break; }
   }
   if (!n) html += `<div class="empty">No Pokémon match.</div>`;
   MAIN.innerHTML = html;
@@ -336,7 +335,7 @@ function renderPickMon(o) {
   MAIN.innerHTML = ''; document.body.appendChild(el);
   const list = () => {
     const ql = q.trim().toLowerCase(); let html = '', n = 0;
-    for (const m of D.mons) { if (!m.base && !ql) continue; if (ql && !m.name.toLowerCase().includes(ql)) continue; html += `<div class="row" data-pick="${m.id}"><img class="sp" loading="lazy" src="${spr(m)}" alt=""><div class="nm">${h(m.name)}<span class="sub">${typeChips(m)}</span></div></div>`; if (++n >= 150) break; }
+    for (const m of D.mons) { if (!m.base && !ql) continue; if (ql && !m.name.toLowerCase().includes(ql)) continue; html += `<div class="row" data-pick="${m.id}"><img class="sp" loading="lazy" src="${spr(m)}" alt=""><div class="nm">${h(m.name)}<span class="sub">${typeChips(m)}</span></div></div>`; ++n; }
     $('#pmList').innerHTML = html || `<div class="empty">Nothing matches.</div>`;
     $('#pmList').querySelectorAll('[data-pick]').forEach(r => r.onclick = () => {
       const m = MON.get(+r.dataset.pick); const T = team();
