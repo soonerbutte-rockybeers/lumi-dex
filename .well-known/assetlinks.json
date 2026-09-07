@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.github.soonerbutte_rockybeers.twa",
+    "sha256_cert_fingerprints": ["21:0C:CB:A7:E3:41:8A:27:8B:11:B0:B8:5B:46:1F:B9:75:4B:69:9B:3A:1D:0A:8D:1D:EB:50:17:A6:FE:48:0E"]
+  }
+}]
