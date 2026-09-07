@@ -1,39 +1,16 @@
-# Lumi Dex — Luminescent Platinum companion for the AYN Thor
+# Lumi Dex
 
-Offline-capable Pokédex, route guide, and team builder built from the
-Luminescent 2.2F game data (TeamLumi/luminescent-team). Sized for the
-Thor's 3.92" 1080×1240 bottom screen.
+A second-screen companion for Pokémon Luminescent Platinum, built for the AYN Thor's bottom screen. Open it below while you play above, and it shows what's catchable exactly where you are.
 
-## Put it on GitHub Pages
+**Use it:** https://soonerbutte-rockybeers.github.io/lumi-dex/ — open in Chrome, choose "Add to Home screen," then it runs as its own app and works offline. In the app, gear icon → "Cache all sprites" so pictures load without a connection.
 
-One-time setup. Do this on the Mac.
+## What's in it
 
-1. On github.com, click "New repository". Name it `lumi-dex`, Public, no README. Create it.
-2. Unzip lumi-dex.zip. You'll have a folder called `app`.
-3. COPY THIS INTO THE MAC (Terminal), one line at a time, replacing YOURNAME with your GitHub username:
+- **Route guide** — every location in story order with prev/next buttons. Wild encounters by method (grass, morning/day/night, surf, each rod, swarm, incense, honey tree, statics and gifts) with rates and levels, plus every trainer's team and the items on the ground. Tick Pokémon off as you catch them.
+- **Pokédex** — all 513 Pokémon and their forms: types, stats, abilities, evolution chains, gender ratio, egg groups, where to find them, and full level-up / TM / egg / tutor learnsets.
+- **Team builder** — save multiple teams, pick abilities and four moves from each Pokémon's real learnset, and see defensive weaknesses and offensive coverage at a glance.
+- **Moves** — searchable list with descriptions and everything that learns each move.
 
-    cd ~/Downloads/app
-    git init -b main
-    git add .
-    git commit -m "Lumi Dex"
-    git remote add origin https://github.com/YOURNAME/lumi-dex.git
-    git push -u origin main
+Sized for the Thor's near-square 1080×1240 bottom screen, with a large-text option. Works on any phone too.
 
-4. On github.com → your repo → Settings → Pages → "Build and deployment":
-   Source = "Deploy from a branch", Branch = main, folder = / (root). Save.
-5. Wait about a minute. The app is at https://YOURNAME.github.io/lumi-dex/
-
-## Install it on the Thor
-
-1. Open Chrome on the Thor and go to the URL above.
-2. Chrome menu (⋮) → "Add to Home screen" / "Install app".
-3. Open it from the home screen. It runs full-screen as its own app; send it to the bottom screen like any other app.
-4. Inside the app: gear icon → "Cache all sprites" → Download. After that it works with no connection.
-
-## Updating
-
-Change files in the `app` folder, then on the Mac:
-
-    cd ~/Downloads/app && git add . && git commit -m "update" && git push
-
-The app picks up the update the next time it's opened with a connection.
+Game data comes from Team Luminescent's own site data (version 2.2F). Not affiliated with Team Luminescent, Nintendo, or Game Freak.
