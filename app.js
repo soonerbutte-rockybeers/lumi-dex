@@ -23,6 +23,8 @@ const S = {
   big: LS.get('big', false),
   showTr: LS.get('showTr', true), showIt: LS.get('showIt', true),
   beaten: LS.get('beaten', {}),   // boss index -> true
+  dexCaught: LS.get('dexCaught', {}), // pokemon id -> true
+  dexShow: 'all',                 // 'all' | 'caught' | 'missing'
   sugPool: LS.get('sugPool', 'now'), // 'now' | 'all'
 };
 if (!S.teams) S.teams = [{ name: 'Team 1', slots: [null, null, null, null, null, null] }];
@@ -113,7 +115,8 @@ const spr = (m) => `sprites/${m.img}`;
 const typeChips = (m) => monTypes(m).map(t => `<span class="tp ${t}" style="background:var(--${t})">${t}</span>`).join('');
 const monRow = (m, extra = '', cls = '') => `<div class="row ${cls}" data-mon="${m.id}"><img class="sp" loading="lazy" src="${spr(m)}" alt=""><div class="nm">${h(m.name)}<span class="sub">${typeChips(m)}</span></div>${extra}</div>`;
 MAIN.addEventListener('click', (e) => {
-  const tk = e.target.closest('.tick'); if (tk) { e.stopPropagation(); const k = tk.dataset.k; if (S.caught[k]) delete S.caught[k]; else S.caught[k] = true; LS.set('caught', S.caught); tk.classList.toggle('on', !!S.caught[k]); tk.closest('.row')?.classList.toggle('caught', !!S.caught[k]); return; }
+  const dt = e.target.closest('.tick[data-d]'); if (dt) { e.stopPropagation(); const id = dt.dataset.d; if (S.dexCaught[id]) delete S.dexCaught[id]; else S.dexCaught[id] = true; LS.set('dexCaught', S.dexCaught); dt.classList.toggle('on', !!S.dexCaught[id]); dt.closest('.row')?.classList.toggle('caught', !!S.dexCaught[id]); const c = $('#dexCnt'); if (c) c.textContent = dexCaughtCount(); return; }
+  const tk = e.target.closest('.tick[data-k]'); if (tk) { e.stopPropagation(); const k = tk.dataset.k; if (S.caught[k]) delete S.caught[k]; else { S.caught[k] = true; const id = k.split('|')[1]; if (MON.has(+id)) { S.dexCaught[id] = true; LS.set('dexCaught', S.dexCaught); } } LS.set('caught', S.caught); tk.classList.toggle('on', !!S.caught[k]); tk.closest('.row')?.classList.toggle('caught', !!S.caught[k]); return; }
   const f = e.target.closest('.fh'); if (f) { f.parentElement.classList.toggle('open'); return; }
   const a = e.target.closest('.abil'); if (a) { a.classList.toggle('open'); return; }
   const r = e.target.closest('[data-mon]'); if (r && r.dataset.mon) { push({ kind: 'mon', id: +r.dataset.mon, tab: 'lv' }); return; }
@@ -179,19 +182,24 @@ function renderDex() {
   topbar('Pokédex');
   const ql = S.dexQ.trim().toLowerCase();
   let html = `<input class="search" id="dxQ" placeholder="Search Pokémon" value="${h(S.dexQ)}" autocomplete="off">
+    <div class="chips"><span class="chip" style="background:transparent;color:var(--gold);padding-left:.2rem" id="dexCnt">${dexCaughtCount()}</span>${[['all', 'All'], ['caught', 'Caught'], ['missing', 'Missing']].map(([k, l]) => `<button class="chip${S.dexShow === k ? ' on' : ''}" data-show="${k}">${l}</button>`).join('')}</div>
     <div class="chips"><button class="chip${S.dexType == null ? ' on' : ''}" data-t="">All types</button>${TYPES.map(t => `<button class="chip t${S.dexType === t ? ' on' : ''}" data-t="${t}" style="background:var(--${t})">${t}</button>`).join('')}</div>`;
   let n = 0;
   for (const m of D.mons) {
     if (!m.base && !ql) continue;
     if (ql && !m.name.toLowerCase().includes(ql) && String(m.no) !== ql) continue;
     if (S.dexType && !monTypes(m).includes(S.dexType)) continue;
-    html += monRow(m, `<div class="rt" style="color:var(--dim);font-weight:700;font-size:.8rem">#${String(m.no).padStart(3, '0')}</div>`); n++;
+    const c = !!S.dexCaught[m.id];
+    if (S.dexShow === 'caught' && !c) continue; if (S.dexShow === 'missing' && c) continue;
+    html += monRow(m, `<div class="rt" style="color:var(--dim);font-weight:700;font-size:.8rem">#${String(m.no).padStart(3, '0')}</div><button class="tick${c ? ' on' : ''}" data-d="${m.id}"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></button>`, c ? 'caught' : ''); n++;
   }
   if (!n) html += `<div class="empty">No Pokémon match.</div>`;
   MAIN.innerHTML = html;
   const inp = $('#dxQ'); inp.oninput = () => { S.dexQ = inp.value; const st = MAIN.scrollTop; render(); $('#dxQ').focus(); const v = $('#dxQ'); v.setSelectionRange(v.value.length, v.value.length); MAIN.scrollTop = st; };
   MAIN.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { S.dexType = b.dataset.t || null; render(); });
+  MAIN.querySelectorAll('[data-show]').forEach(b => b.onclick = () => { S.dexShow = b.dataset.show; render(); });
 }
+function dexCaughtCount() { const tot = D.mons.filter(m => m.base).length; const got = D.mons.filter(m => m.base && S.dexCaught[m.id]).length; return `${got} / ${tot} caught`; }
 function statBar(v, color) { return `<div class="bar"><i style="width:${Math.min(100, v / 1.8)}%;background:${color}"></i></div>`; }
 function statColor(v) { return v >= 120 ? '#6ad36a' : v >= 90 ? '#a5d84f' : v >= 60 ? '#f2c94c' : v >= 40 ? '#f2994a' : '#e4514f'; }
 function gender(sex) { if (sex === 255) return 'Genderless'; if (sex === 0) return 'Male only'; if (sex === 254) return 'Female only'; const f = Math.round(sex / 256 * 1000) / 10; return `${(100 - f).toFixed(1).replace('.0', '')}% ♂ / ${f.toFixed(1).replace('.0', '')}% ♀`; }
@@ -199,7 +207,7 @@ function renderMon(o) {
   const m = MON.get(o.id); if (!m) { stack.pop(); return render(); }
   topbar(h(m.name), { back: true });
   const ST = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed'];
-  let html = `<div class="hero"><img src="${spr(m)}" alt=""><div><div class="no">#${String(m.no).padStart(3, '0')}</div><h2>${h(m.name)}</h2><div>${typeChips(m)}</div><div class="meta">${gender(m.sex)}<br>${m.h} m · ${m.w} kg${m.egg.length ? `<br>Egg: ${h(m.egg.join(', '))}` : ''}${m.items.length ? `<br>Holds: ${h(m.items.join(', '))}` : ''}</div></div></div>`;
+  let html = `<div class="hero"><img src="${spr(m)}" alt=""><div style="flex:1;min-width:0"><div class="no">#${String(m.no).padStart(3, '0')}</div><h2>${h(m.name)}</h2><div>${typeChips(m)}</div><div class="meta">${gender(m.sex)}<br>${m.h} m · ${m.w} kg${m.egg.length ? `<br>Egg: ${h(m.egg.join(', '))}` : ''}${m.items.length ? `<br>Holds: ${h(m.items.join(', '))}` : ''}</div></div><button class="tick${S.dexCaught[m.id] ? ' on' : ''}" data-d="${m.id}" style="width:2.6rem;height:2.6rem;align-self:flex-start"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></button></div>`;
   if (m.forms.length > 1) html += `<div class="chips">${m.forms.map(f => { const fm = MON.get(f); return fm ? `<button class="chip${f === m.id ? ' on' : ''}" data-mon="${f}">${h(fm.name)}</button>` : ''; }).join('')}</div>`;
   if (m.dex) html += `<div class="desc">${h(m.dex)}</div>`;
   // stats
@@ -283,12 +291,29 @@ function renderTeam() {
   topbar('Team builder');
   const T = team();
   let html = `<div class="tmbar"><select id="tmSel">${S.teams.map((t, i) => `<option value="${i}"${i === S.teamIx ? ' selected' : ''}>${h(t.name)}</option>`).join('')}</select><button class="ib" id="tmNew" title="New team">+</button><button class="ib" id="tmRen" title="Rename"><svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16z"/></svg></button><button class="ib" id="tmDel" title="Delete"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button></div>`;
+  { const g = gradeTeam(T);
+    if (g) { const rem = g.perBoss;
+      html += `<div class="grade"><div class="gs">${starStr(g.stars)}</div><div class="gt"><b>${['', 'Not recommended', 'Rough ride ahead', 'Workable', 'Strong', 'Top notch'][g.stars]} <span style="color:var(--dim);font-weight:600;font-size:.8rem">· score ${Math.round(g.raw * 100)}</span></b><small>${rem.length ? `vs the ${rem.length} fight${rem.length > 1 ? 's' : ''} left · hits ${Math.round(g.off * 100)}% super-effectively · safe switch vs ${Math.round(g.def * 100)}%` : 'nothing left to fight'}</small>${g.notes.length ? `<small style="color:var(--amber)">${h(g.notes.join(' · '))}</small>` : ''}</div></div>`;
+      { const rep = memberReport(T); const weakest = rep.rows.length >= 2 ? rep.rows.reduce((a, b) => b.val < a.val ? b : a) : null;
+        let swap = null;
+        if (weakest && rem.length) { const clone = { name: T.name, slots: T.slots.map((x, i) => i === weakest.i ? null : x) }; const cands = suggest(clone, rem[0].b).slice(0, 5);
+          for (const c of cands) { const gg = swapPreview(T, weakest.i, c.m.id); if (gg && (!swap || gg.raw > swap.raw)) swap = { m: c.m, raw: gg.raw, stars: gg.stars, get: c.get }; } }
+        html += `<div class="fold why"><button class="fh">Why this grade<span class="cnt">tap to expand</span><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><div class="fb">`;
+        for (const r of rep.rows.slice().sort((a, b) => b.val - a.val)) {
+          const isW = weakest && r.i === weakest.i;
+          html += `<div class="row" data-slot="${r.i}" style="min-height:2.8rem${isW ? ';outline:1px solid var(--red);border-radius:.7rem' : ''}"><img class="sp" loading="lazy" src="${spr(r.m)}" alt="" style="width:2.2rem;height:2.2rem"><div class="nm">${h(r.m.name)}${isW ? ' <span style="color:var(--red);font-size:.72rem">weakest link</span>' : ''}<span class="sub" style="white-space:normal">${r.uniqSE ? `only member super-effective on ${r.uniqSE}` : `super-effective on ${r.se}`} · safe switch-in for ${r.uniqSafe}${r.threat ? ` · <span style="color:var(--amber)">threatened by ${r.threat}</span>` : ''} <span style="color:var(--faint)">of ${rep.n}</span></span></div></div>`; }
+        if (swap && swap.raw > g.raw + 0.02) html += `<div class="row" data-mon="${swap.m.id}" style="background:var(--s1);margin-top:.3rem"><img class="sp" loading="lazy" src="${spr(swap.m)}" alt=""><div class="nm">Swap ${h(weakest.m.name)} → ${h(swap.m.name)}<span class="sub" style="white-space:normal;color:var(--tx);font-weight:500">Score ${Math.round(g.raw * 100)} → <span style="color:var(--gold)">${Math.round(swap.raw * 100)}</span>${swap.stars !== g.stars ? ` · ${starStr(g.stars)} → ${starStr(swap.stars)}` : ''}${swap.get ? ` · ${h(swap.get)}` : ''}</span></div></div>`;
+        else if (weakest) html += `<div class="legend">No catchable swap improves the grade right now — set moves or tick bosses to refresh.</div>`;
+        html += `</div></div>`; }
+      if (rem.length) html += `<div class="bstrip">` + rem.slice(0, 12).map(x => `<button class="bs ${x.score >= .6 ? 'ok' : x.score >= .4 ? 'mid' : 'bad'}" data-boss="${x.i}" title="${h(x.b.t)}">${h(x.b.t.replace(/^(Gym \d · |Commander |Elite Four |Galactic Boss |Champion )/, '').split(' ')[0])}<b>${Math.round(x.score * 100)}</b></button>`).join('') + `</div>`;
+    } }
   html += `<div class="slots">` + T.slots.map((s, i) => {
     if (!s) return `<button class="slot e" data-slot="${i}">+ Add</button>`;
     const m = MON.get(s.id); if (!m) return `<button class="slot e" data-slot="${i}">+ Add</button>`;
     const mvs = s.moves.filter(Boolean).map(id => MOVE.get(id)?.name).filter(Boolean);
     return `<button class="slot" data-slot="${i}"><img src="${spr(m)}" alt=""><div><div class="sn">${h(m.name)}</div><div class="sm">${h(s.ability || '—')}<br>${mvs.length ? h(mvs.join(', ')) : '<i>No moves set</i>'}</div></div></button>`;
   }).join('') + `</div>`;
+  if (T.slots.some(Boolean)) html += `<div style="padding:.5rem 0 0"><button class="btn full" id="fillAll">Fill recommended moves for everyone</button></div>`;
   const mons = T.slots.filter(Boolean).map(s => ({ s, m: MON.get(s.id) })).filter(x => x.m);
   if (mons.length) {
     // defensive: for each attacking type, count members weak / resistant
@@ -321,6 +346,8 @@ function renderTeam() {
   $('#tmNew').onclick = () => { S.teams.push({ name: `Team ${S.teams.length + 1}`, slots: [null, null, null, null, null, null] }); S.teamIx = S.teams.length - 1; saveTeams(); render(); };
   $('#tmRen').onclick = () => { const n = prompt('Team name', T.name); if (n && n.trim()) { T.name = n.trim(); saveTeams(); render(); } };
   $('#tmDel').onclick = () => { if (!confirm(`Delete "${T.name}"?`)) return; S.teams.splice(S.teamIx, 1); if (!S.teams.length) S.teams.push({ name: 'Team 1', slots: [null, null, null, null, null, null] }); S.teamIx = Math.max(0, S.teamIx - 1); saveTeams(); render(); };
+  MAIN.querySelectorAll('[data-boss]').forEach(b => b.onclick = () => push({ kind: 'boss', i: +b.dataset.boss, v: 0 }));
+  if ($('#fillAll')) $('#fillAll').onclick = () => { const L = progressLevel(); T.slots.forEach(s => { if (!s) return; const m = MON.get(s.id); if (!m) return; const r = recommendMoves(s, m, L); s.moves = [0, 1, 2, 3].map(i => r[i] ? r[i].mv.id : null); }); saveTeams(); toast('Moves set'); render(); };
   MAIN.querySelectorAll('[data-slot]').forEach(b => b.onclick = () => { const i = +b.dataset.slot; if (T.slots[i]) push({ kind: 'slot', i }); else push({ kind: 'pickmon', slot: i }); });
 }
 function renderSlot(o) {
@@ -332,11 +359,13 @@ function renderSlot(o) {
     <div class="ef"><label>Pokémon</label><button class="pick" id="chMon"><img src="${spr(m)}" style="width:1.8rem;height:1.8rem" alt="">${h(m.name)}<span class="x">Change</span></button></div>
     <div class="ef"><label>Ability</label><div class="chips">${abils.map((a, i) => `<button class="chip${s.ability === a ? ' on' : ''}" data-ab="${h(a)}">${h(a)}${i === 2 ? ' (H)' : ''}</button>`).join('')}</div></div>
     <div class="ef"><label>Moves</label>${[0, 1, 2, 3].map(i => { const mv = s.moves[i] ? MOVE.get(s.moves[i]) : null; return `<button class="pick${mv ? '' : ' e'}" data-mvslot="${i}" style="margin-bottom:.35rem">${mv ? `<span class="tp ${TYPES[mv.t]}" style="background:var(--${TYPES[mv.t]});margin:0">${TYPES[mv.t]}</span>${h(mv.name)}<span class="x">${mv.pow || '—'} / ${mv.acc && mv.acc <= 100 ? mv.acc : '—'}</span>` : `Move ${i + 1}`}</button>`; }).join('')}</div>
+    <div class="ef"><label>Recommended moves <span style="font-weight:600">· up to Lv ${progressLevel()}</span></label>${(() => { const r = recommendMoves(s, m, progressLevel()); if (!r.length) return '<div class="desc">No damaging moves available yet.</div>'; return r.map(x => moveRow(x.mv, null, `<span class="mp" style="color:var(--faint)">${h(x.how)}</span>`)).join('') + `<button class="btn gold full" id="useRec" style="margin-top:.4rem">Use these ${r.length}</button>`; })()}</div>
     <button class="btn red full" id="rmSlot" style="margin-top:1rem">Remove from team</button></div>`;
   MAIN.innerHTML = html;
   $('#chMon').onclick = () => push({ kind: 'pickmon', slot: o.i });
   MAIN.querySelectorAll('[data-ab]').forEach(b => b.onclick = () => { s.ability = b.dataset.ab; saveTeams(); render(); });
   MAIN.querySelectorAll('[data-mvslot]').forEach(b => b.onclick = () => push({ kind: 'pickmove', slot: o.i, mv: +b.dataset.mvslot }));
+  if ($('#useRec')) $('#useRec').onclick = () => { const r = recommendMoves(s, m, progressLevel()); s.moves = [0, 1, 2, 3].map(i => r[i] ? r[i].mv.id : null); saveTeams(); toast('Moves set'); render(); };
   $('#rmSlot').onclick = () => { T.slots[o.i] = null; saveTeams(); pop(); };
 }
 function renderPickMon(o) {
@@ -490,6 +519,89 @@ function suggest(T, boss) {
   return out.slice(0, 8);
 }
 
+
+// ---------- TEAM GRADE + MOVESETS ----------
+function remainingBosses() { return D.bosses.map((b, i) => ({ b, i })).filter(x => !S.beaten[x.i] && x.b.k !== 'rematch'); }
+function bossPool(bs) { const seen = new Set(), out = []; bs.forEach(({ b }) => b.teams.forEach(t => t.team.forEach(p => { const k = p.id + '|' + p.mv.join(','); if (!seen.has(k)) { seen.add(k); out.push(p); } }))); return out; }
+function memberAttackTypes(s, m) { const mv = s.moves.filter(Boolean).map(id => MOVE.get(id)).filter(x => x && x.cat !== 0 && x.pow > 0); return mv.length ? [...new Set(mv.map(x => TYPES[x.t]))] : monTypes(m); }
+function gradeTeam(T) {
+  const members = T.slots.filter(Boolean).map(s => ({ s, m: MON.get(s.id) })).filter(x => x.m);
+  const rem = remainingBosses();
+  if (!members.length) return null;
+  const perBoss = rem.map(({ b, i }) => {
+    const pool = bossPool([{ b }]); let se = 0, danger = 0;
+    for (const p of pool) { const bm = MON.get(p.id); if (!bm) continue; const bt = monTypes(bm);
+      if (members.some(({ s, m }) => memberAttackTypes(s, m).some(a => defMult(a, bt) >= 2))) se++;
+      const at = p.mv.map(id => MOVE.get(id)).filter(x => x && x.cat !== 0 && x.pow > 0).map(x => TYPES[x.t]); const atk = at.length ? at : bt;
+      const safe = members.some(({ m }) => atk.every(a => defMult(a, monTypes(m)) <= 1));
+      if (!safe) danger++; }
+    const off = pool.length ? se / pool.length : 0, def = pool.length ? 1 - danger / pool.length : 1;
+    return { i, b, off, def, score: off * 0.55 + def * 0.45 };
+  });
+  const off = perBoss.length ? perBoss.reduce((a, x) => a + x.off, 0) / perBoss.length : 0.7;
+  const def = perBoss.length ? perBoss.reduce((a, x) => a + x.def, 0) / perBoss.length : 0.7;
+  let holes = 0; TYPES.forEach(t => { let w = 0; members.forEach(({ m }) => { if (defMult(t, monTypes(m)) > 1) w++; }); if (w >= 3) holes++; });
+  const atk = new Set(); members.forEach(({ s, m }) => memberAttackTypes(s, m).forEach(a => atk.add(a)));
+  let uncovered = 0; TYPES.forEach(t => { let best = 0; atk.forEach(a => best = Math.max(best, eff(a, t))); if (best < 1) uncovered++; });
+  const roster = members.length / 6;
+  const nextLv = rem.length ? bossLv(rem[0].b) : 100;
+  const avgBst = members.reduce((a, { m }) => a + m.st.reduce((x, y) => x + y, 0), 0) / members.length;
+  const statFit = Math.max(0, Math.min(1, (avgBst - 300) / 220));
+  let raw = off * 0.38 + def * 0.30 + roster * 0.14 + statFit * 0.10 + (1 - Math.min(1, holes / 3)) * 0.04 + (1 - Math.min(1, uncovered / 4)) * 0.04;
+  const cap = members.length <= 2 ? 2 : members.length === 3 ? 3 : members.length === 4 ? 4 : 5;
+  const stars = Math.max(1, Math.min(cap, Math.round(raw * 5 + 0.25)));
+  const notes = [];
+  if (members.length < 6) notes.push(`${6 - members.length} empty slot${members.length === 5 ? '' : 's'}`);
+  if (holes) notes.push(`${holes} type${holes > 1 ? 's' : ''} hit 3+ members`);
+  if (uncovered) notes.push(`${uncovered} type${uncovered > 1 ? 's' : ''} nobody hits neutrally`);
+  if (!members.some(({ s }) => s.moves.some(Boolean))) notes.push('no moves set — offense judged by STAB only');
+  return { stars, raw, off, def, perBoss, notes, nextLv };
+}
+
+function memberReport(T) {
+  const members = T.slots.map((s, i) => s ? { s, m: MON.get(s.id), i } : null).filter(x => x && x.m);
+  const rem = remainingBosses(); const pool = bossPool(rem.length ? rem : []);
+  const rows = members.map(x => ({ ...x, uniqSE: 0, uniqSafe: 0, threat: 0, se: 0 }));
+  for (const p of pool) { const bm = MON.get(p.id); if (!bm) continue; const bt = monTypes(bm);
+    const at = p.mv.map(id => MOVE.get(id)).filter(x => x && x.cat !== 0 && x.pow > 0).map(x => TYPES[x.t]); const atk = at.length ? at : bt;
+    const seBy = rows.filter(r => memberAttackTypes(r.s, r.m).some(a => defMult(a, bt) >= 2));
+    const safeBy = rows.filter(r => atk.every(a => defMult(a, monTypes(r.m)) <= 1));
+    seBy.forEach(r => r.se++); if (seBy.length === 1) seBy[0].uniqSE++; if (safeBy.length === 1) safeBy[0].uniqSafe++;
+    rows.forEach(r => { if (atk.some(a => defMult(a, monTypes(r.m)) >= 2)) r.threat++; }); }
+  rows.forEach(r => { r.val = r.uniqSE * 1.0 + r.uniqSafe * 0.8 + r.se * 0.15 - r.threat * 0.35 + (r.m.st.reduce((a, b) => a + b, 0) - 420) / 150; });
+  return { rows, n: pool.length };
+}
+function swapPreview(T, slotIx, candId) {
+  const clone = { name: T.name, slots: T.slots.map(s => s ? { id: s.id, ability: s.ability, moves: s.moves.slice() } : null) };
+  clone.slots[slotIx] = { id: candId, ability: null, moves: [null, null, null, null] };
+  return gradeTeam(clone);
+}
+function starStr(n) { return '★'.repeat(n) + '☆'.repeat(5 - n); }
+function recommendMoves(s, m, L) {
+  const rem = remainingBosses(); const pool = bossPool(rem.length ? rem : D.bosses.map(b => ({ b })));
+  const phys = m.st[1], spec = m.st[3]; const tt = monTypes(m);
+  const cands = new Map();
+  for (const [lv, id] of m.lv) if (lv <= L && !cands.has(id)) cands.set(id, `Lv ${lv || 'Evo'}`);
+  for (const id of m.tm) if (!cands.has(id)) cands.set(id, 'TM');
+  for (const id of m.eg) if (!cands.has(id)) cands.set(id, 'Egg');
+  for (const id of m.tu) if (!cands.has(id)) cands.set(id, 'Tutor');
+  const scored = [];
+  for (const [id, how] of cands) { const mv = MOVE.get(id); if (!mv || mv.cat === 0 || !mv.pow) continue;
+    const t = TYPES[mv.t]; const stat = mv.cat === 1 ? phys : spec, other = mv.cat === 1 ? spec : phys;
+    let v = (mv.pow <= 1 ? 50 : mv.pow) * (mv.acc && mv.acc <= 100 ? mv.acc / 100 : 1) * (stat / Math.max(stat, other)) * (tt.includes(t) ? 1.5 : 1);
+    let hits = 0; for (const p of pool) { const bm = MON.get(p.id); if (bm) hits += eff(t, monTypes(bm)[0]) * (monTypes(bm)[1] ? eff(t, monTypes(bm)[1]) : 1); }
+    v *= 0.6 + 0.4 * (pool.length ? hits / pool.length : 1);
+    if (/recharge|must rest|charges up|focuses its mind|fails if the user|lowers the user|harshly lowers|user[’']s .*stat|user takes|can[’']t move|next turn|user faints|sleeps? for/i.test(mv.desc)) v *= 0.55;
+    if (how === 'TM') v *= 0.6; if (how === 'Egg') v *= 0.5; if (how === 'Tutor') v *= 0.5;
+    scored.push({ mv, how, v, t }); }
+  scored.sort((a, b) => b.v - a.v);
+  const picks = [], usedT = new Set();
+  for (const x of scored) { if (picks.length >= 4) break; if (usedT.has(x.t)) continue; picks.push(x); usedT.add(x.t); }
+  for (const x of scored) { if (picks.length >= 4) break; if (!picks.includes(x)) picks.push(x); }
+  return picks;
+}
+function progressLevel() { const i = nextBossIx(); return i < 0 ? 100 : bossLv(D.bosses[i]) + 2; }
+
 // ---------- SETTINGS ----------
 function renderSettings() {
   topbar('Settings', { back: true });
@@ -500,12 +612,14 @@ function renderSettings() {
     <div class="r"><div><b>Items on route pages</b><small>Ground and hidden items</small></div><button class="btn${S.showIt ? ' gold' : ''}" id="stIt">${S.showIt ? 'On' : 'Off'}</button></div>
     <div class="r"><div><b>Cache all sprites</b><small>~11 MB so every picture works offline</small></div><button class="btn" id="stCache">Download</button></div>
     <div class="r"><div><b>Clear boss checklist</b><small>${Object.keys(S.beaten).length} beaten right now</small></div><button class="btn red" id="stClrB">Clear</button></div>
-    <div class="r"><div><b>Clear caught ticks</b><small>${caught} ticked right now</small></div><button class="btn red" id="stClr">Clear</button></div>
+    <div class="r"><div><b>Clear Pokédex caught marks</b><small>${Object.keys(S.dexCaught).length} marked</small></div><button class="btn red" id="stClrD">Clear</button></div>
+    <div class="r"><div><b>Clear route ticks</b><small>${caught} ticked right now</small></div><button class="btn red" id="stClr">Clear</button></div>
     <div class="legend" style="padding-top:1rem">Data: ${h(D.version)}, from luminescent.team. Sprites © Nintendo / Game Freak.</div></div>`;
   $('#stBig').onclick = () => { S.big = !S.big; LS.set('big', S.big); document.documentElement.classList.toggle('big', S.big); render(); };
   $('#stTr').onclick = () => { S.showTr = !S.showTr; LS.set('showTr', S.showTr); render(); };
   $('#stIt').onclick = () => { S.showIt = !S.showIt; LS.set('showIt', S.showIt); render(); };
   $('#stClrB').onclick = () => { if (confirm('Clear the boss checklist?')) { S.beaten = {}; LS.set('beaten', S.beaten); render(); } };
+  $('#stClrD').onclick = () => { if (confirm('Clear all Pokédex caught marks?')) { S.dexCaught = {}; LS.set('dexCaught', S.dexCaught); render(); } };
   $('#stClr').onclick = () => { if (confirm(`Clear all ${caught} caught ticks?`)) { S.caught = {}; LS.set('caught', S.caught); render(); } };
   $('#stCache').onclick = async (e) => {
     e.target.textContent = '0%'; const urls = D.mons.map(m => spr(m)); let done = 0;
