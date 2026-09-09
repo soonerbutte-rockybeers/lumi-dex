@@ -1,4 +1,4 @@
-const V = "lumi-v2";
+const V = "lumi-v3";
 const SHELL = ['./', 'index.html', 'app.js', 'data.json', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V && k !== 'lumi-sprites').map(k => caches.delete(k)))).then(() => self.clients.claim())); });

@@ -22,6 +22,8 @@ const S = {
   teamIx: LS.get('teamIx', 0),
   big: LS.get('big', false),
   showTr: LS.get('showTr', true), showIt: LS.get('showIt', true),
+  beaten: LS.get('beaten', {}),   // boss index -> true
+  sugPool: LS.get('sugPool', 'now'), // 'now' | 'all'
 };
 if (!S.teams) S.teams = [{ name: 'Team 1', slots: [null, null, null, null, null, null] }];
 document.documentElement.classList.toggle('big', S.big);
@@ -96,9 +98,9 @@ function render() {
     if (o.kind === 'pickmon') return renderPickMon(o);
     if (o.kind === 'pickmove') return renderPickMove(o);
     if (o.kind === 'settings') return renderSettings();
-    if (o.kind === 'zonepick') return renderZonePick(o);
+    if (o.kind === 'boss') return renderBoss(o);
   }
-  ({ route: renderRoute, dex: renderDex, team: renderTeam, moves: renderMoves })[S.view]();
+  ({ route: renderRoute, dex: renderDex, team: renderTeam, moves: renderMoves, boss: renderBosses })[S.view]();
 }
 function topbar(title, { back = false, right = '', tap = false } = {}) {
   TOP.innerHTML = (back ? `<button class="ib" id="tbBack"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>` : '')
@@ -305,7 +307,16 @@ function renderTeam() {
       return `<div class="c${cls}" style="background:var(--${t})">${t}<b>${best === 0 ? '0' : best === .5 ? '½' : best}×</b></div>`;
     }).join('') + `</div><div class="legend">Best multiplier any of your attacking moves lands on each defending type. Red: nothing hits it neutrally.</div>`;
   } else html += `<div class="empty">Tap a slot to add a Pokémon. Coverage appears once you have one.</div>`;
+  {
+    const nx = nextBossIx(); const boss = nx >= 0 ? D.bosses[nx] : null;
+    html += `<div class="sec">Suggestions</div><div class="chips"><button class="chip${S.sugPool === 'now' ? ' on' : ''}" data-pool="now">Catchable so far</button><button class="chip${S.sugPool === 'all' ? ' on' : ''}" data-pool="all">Anyone</button></div>`;
+    html += `<div class="legend">${boss ? `Scored against your team's gaps and <b>${h(boss.t)}</b> (next unticked fight in Bosses).` : 'Scored against your team\'s gaps.'}${S.sugPool === 'now' ? ` Limited to Pokémon obtainable before that fight, evolutions included where the level allows.` : ''}</div>`;
+    const sug = suggest(T, boss);
+    if (!sug.length) html += `<div class="empty">Nothing to suggest — tick a boss or two, or switch to Anyone.</div>`;
+    for (const x of sug) html += `<div class="row" data-mon="${x.m.id}"><img class="sp" loading="lazy" src="${spr(x.m)}" alt=""><div class="nm">${h(x.m.name)}<span class="sub">${typeChips(x.m)}</span><span class="sub" style="white-space:normal;color:var(--tx);font-weight:500">${h(x.why)}</span>${x.get ? `<span class="sub" style="color:var(--gold)">${h(x.get)}</span>` : ''}</div></div>`;
+  }
   MAIN.innerHTML = html;
+  MAIN.querySelectorAll('[data-pool]').forEach(b => b.onclick = () => { S.sugPool = b.dataset.pool; LS.set('sugPool', S.sugPool); const st = MAIN.scrollTop; render(); MAIN.scrollTop = st; });
   $('#tmSel').onchange = (e) => { S.teamIx = +e.target.value; saveTeams(); render(); };
   $('#tmNew').onclick = () => { S.teams.push({ name: `Team ${S.teams.length + 1}`, slots: [null, null, null, null, null, null] }); S.teamIx = S.teams.length - 1; saveTeams(); render(); };
   $('#tmRen').onclick = () => { const n = prompt('Team name', T.name); if (n && n.trim()) { T.name = n.trim(); saveTeams(); render(); } };
@@ -369,6 +380,116 @@ function renderPickMove(o) {
   $('#pvQ').oninput = (e) => { q = e.target.value; list(); }; $('#pvBack').onclick = pop; list();
 }
 
+
+// ---------- BOSSES / PROGRESS ----------
+const bossLv = (b) => Math.max(...b.teams.map(t => Math.max(...t.team.map(p => p.lv))));
+function nextBossIx() { for (let i = 0; i < D.bosses.length; i++) if (!S.beaten[i]) return i; return -1; }
+function progressGroup() { const i = nextBossIx(); return i < 0 ? D.groups.length - 1 : D.bosses[i].g; }
+function bossTeamRows(t) {
+  return t.team.map(p => { const m = MON.get(p.id); if (!m) return ''; const mvs = p.mv.map(id => MOVE.get(id)).filter(Boolean);
+    return `<div class="row" data-mon="${m.id}"><img class="sp" loading="lazy" src="${spr(m)}" alt=""><div class="nm">${h(m.name)} <span style="color:var(--dim);font-weight:600">Lv ${p.lv}</span><span class="sub">${typeChips(m)}${p.ab ? ` <span style="color:var(--dim)">${h(p.ab)}</span>` : ''}</span><span class="sub">${mvs.map(mv => `<span class="tp ${TYPES[mv.t]}" style="background:var(--${TYPES[mv.t]});font-size:.62rem;padding:.05rem .35rem">${h(mv.name)}</span>`).join('')}</span></div>${p.item && p.item !== 'None' ? `<div class="rt" style="font-size:.7rem;color:var(--dim);font-weight:600">${h(p.item)}</div>` : ''}</div>`; }).join('');
+}
+function renderBosses() {
+  topbar('Bosses');
+  const nx = nextBossIx(); const done = Object.keys(S.beaten).length;
+  let html = '';
+  if (nx >= 0) { const b = D.bosses[nx]; html += `<div class="sec">Next up</div><button class="slot" data-boss="${nx}" style="width:100%;margin-bottom:.4rem"><div style="flex:1"><div class="sn" style="font-size:1rem">${h(b.t)}</div><div class="sm">${h(D.groups[b.g].name)} · up to Lv ${bossLv(b)}${b.teams.length > 1 ? ` · ${b.teams.length} possible teams` : ''}</div></div><span style="color:var(--gold);font-weight:800">›</span></button>`; }
+  else html += `<div class="desc">Everything's beaten. Nice.</div>`;
+  html += `<div class="sec">Checklist<span class="cnt">${done} / ${D.bosses.length}</span></div>`;
+  let lastKind = '';
+  D.bosses.forEach((b, i) => {
+    if (b.k === 'post' && lastKind !== 'post' && lastKind !== 'rematch') html += `<div class="sec" style="font-size:.85rem;color:var(--dim)">Post-game</div>`;
+    if (b.k === 'rematch' && lastKind !== 'rematch') html += `<div class="sec" style="font-size:.85rem;color:var(--dim)">Rematches</div>`;
+    lastKind = b.k;
+    html += `<div class="row${S.beaten[i] ? ' caught' : ''}${i === nx ? '' : ''}" data-boss="${i}" style="min-height:2.9rem"><div class="nm">${i === nx ? '<span style="color:var(--gold)">▶ </span>' : ''}${h(b.t)}<span class="sub">${h(D.groups[b.g].name)} · Lv ${bossLv(b)}</span></div><button class="tick${S.beaten[i] ? ' on' : ''}" data-b="${i}"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></button></div>`;
+  });
+  html += `<div class="legend" style="padding-top:.8rem">Tick fights as you win them. The next unticked fight sets your progress: team suggestions only use Pokémon catchable before it.</div>`;
+  MAIN.innerHTML = html;
+  MAIN.querySelectorAll('[data-b]').forEach(t => t.onclick = (e) => { e.stopPropagation(); const i = +t.dataset.b; if (S.beaten[i]) delete S.beaten[i]; else S.beaten[i] = true; LS.set('beaten', S.beaten); const st = MAIN.scrollTop; render(); MAIN.scrollTop = st; });
+  MAIN.querySelectorAll('[data-boss]').forEach(r => r.onclick = () => push({ kind: 'boss', i: +r.dataset.boss, v: 0 }));
+}
+function renderBoss(o) {
+  const b = D.bosses[o.i]; if (!b) { stack.pop(); return render(); }
+  topbar(h(b.t), { back: true });
+  let html = `<div class="desc" style="padding-top:.5rem"><b style="color:var(--tx)">${h(D.groups[b.g].name)}</b> · strongest Pokémon Lv ${bossLv(b)}${b.teams.length > 1 ? `<br>The game picks one of ${b.teams.length} teams — prepare for all of them.` : ''}</div>`;
+  if (b.teams.length > 1) html += `<div class="chips">${b.teams.map((t, i) => `<button class="chip${o.v === i ? ' on' : ''}" data-v="${i}">${h(t.n.replace(/^(Gym Leader|Elite Four|Champion|Team Galactic Boss|Commander|Pokémon Trainer)\s*/, ''))}</button>`).join('')}</div>`;
+  html += bossTeamRows(b.teams[o.v] || b.teams[0]);
+  html += `<div style="padding:.8rem .2rem"><button class="btn ${S.beaten[o.i] ? '' : 'gold'} full" id="bsDone">${S.beaten[o.i] ? 'Mark as not beaten' : 'Mark as beaten'}</button></div>`;
+  MAIN.innerHTML = html;
+  MAIN.querySelectorAll('[data-v]').forEach(c => c.onclick = () => { o.v = +c.dataset.v; render(); });
+  $('#bsDone').onclick = () => { if (S.beaten[o.i]) delete S.beaten[o.i]; else S.beaten[o.i] = true; LS.set('beaten', S.beaten); render(); };
+}
+
+// ---------- SUGGESTIONS ----------
+function evoLevel(text) { const m = /Level (\d+)|Lv\. (\d+)/i.exec(text || ''); return m ? +(m[1] || m[2]) : null; }
+const G_ETERNA = 17, G_MOSS = 15, G_ICE = 51, G_MAGNET = 22; // story-order group indexes
+function evoAllowed(how, P, L) {
+  // each " / " alternative is a separate path; any one that works is enough
+  return (how || '').split(' / ').some(alt => {
+    const lv = evoLevel(alt); if (lv != null && lv > L) return false;
+    if (/Ice Rock/i.test(alt) && P < G_ICE) return false;
+    if (/Moss Rock/i.test(alt) && P < G_MOSS) return false;
+    if (/Magnetic Field/i.test(alt) && P < G_MAGNET) return false;
+    if (/^(Use |Hold |High Beauty)/i.test(alt) && P < G_ETERNA) return false; // stones & items: Grand Underground opens at Eterna
+    return true;
+  });
+}
+function reachableSet(P, L) {
+  // start from directly catchable mons up to group P, walk evolutions whose level requirement <= L
+  const R = new Map(); // id -> {via: baseId}
+  const base = D.mons.filter(m => m.dav != null && m.dav <= P);
+  const q = []; for (const m of base) { R.set(m.id, m.id); q.push(m.id); }
+  while (q.length) { const id = q.shift(); const m = MON.get(id); if (!m) continue;
+    for (const [a, b, how] of m.evo.edges) { if (a !== id || R.has(b)) continue; if (!evoAllowed(how, P, L)) continue; R.set(b, R.get(id)); q.push(b); } }
+  return R;
+}
+function suggest(T, boss) {
+  const members = T.slots.filter(Boolean).map(s => ({ s, m: MON.get(s.id) })).filter(x => x.m);
+  const have = new Set(members.map(x => x.m.id));
+  const teamTypes = new Set(); members.forEach(({ m }) => monTypes(m).forEach(t => teamTypes.add(t)));
+  const weak = {}; TYPES.forEach(t => { weak[t] = 0; members.forEach(({ m }) => { if (defMult(t, monTypes(m)) > 1) weak[t]++; }); });
+  const bestOff = {}; { const atk = new Set(); let used = false; members.forEach(({ s }) => s.moves.filter(Boolean).map(id => MOVE.get(id)).filter(x => x && x.cat !== 0 && x.pow > 0).forEach(x => { used = true; atk.add(TYPES[x.t]); })); if (!used) members.forEach(({ m }) => monTypes(m).forEach(t => atk.add(t))); TYPES.forEach(t => { let b = 0; atk.forEach(a => b = Math.max(b, eff(a, t))); bestOff[t] = atk.size ? b : 1; }); }
+  const P = S.sugPool === 'all' ? D.groups.length - 1 : progressGroup();
+  const L = S.sugPool === 'all' ? 100 : (boss ? bossLv(boss) + 4 : 100);
+  const R = reachableSet(P, L);
+  const bossMons = []; if (boss) { const seen = new Set(); boss.teams.forEach(t => t.team.forEach(p => { if (!seen.has(p.id)) { seen.add(p.id); bossMons.push(p); } })); }
+  const out = [];
+  for (const [id, baseId] of R) {
+    const m = MON.get(id); if (!m || have.has(id)) continue;
+    // prefer the highest reachable form: skip if it evolves into something reachable
+    if (m.evo.edges.some(([a, b]) => a === id && R.has(b))) continue;
+    const tt = monTypes(m); let sc = 0; const why = [];
+    // patches shared weaknesses
+    const patched = TYPES.filter(t => weak[t] >= 2 && defMult(t, tt) < 1);
+    if (patched.length) { sc += patched.reduce((a, t) => a + weak[t] * 1.2, 0); why.push(`resists ${patched.slice(0, 3).join(', ')} (weak spots)`); }
+    const adds = TYPES.filter(t => weak[t] >= 1 && defMult(t, tt) > 1).length; sc -= adds * 0.6;
+    // new offensive coverage from STAB
+    const covers = TYPES.filter(t => bestOff[t] < 1 && tt.some(a => eff(a, t) >= 2));
+    const neut = TYPES.filter(t => bestOff[t] < 1 && !covers.includes(t) && tt.some(a => eff(a, t) >= 1));
+    if (covers.length) { sc += covers.length * 1.5; why.push(`STAB hits ${covers.slice(0, 3).join(', ')}, which nothing on your team does`); }
+    sc += neut.length * 0.5;
+    // vs boss
+    if (bossMons.length) {
+      let se = 0, hurt = 0;
+      for (const p of bossMons) { const bm = MON.get(p.id); if (!bm) continue; const bt = monTypes(bm);
+        if (tt.some(a => defMult(a, bt) >= 2)) se++;
+        const mvT = p.mv.map(i => MOVE.get(i)).filter(x => x && x.cat !== 0 && x.pow > 0).map(x => TYPES[x.t]);
+        if ((mvT.length ? mvT : bt).some(a => defMult(a, tt) >= 2)) hurt++; }
+      sc += se * 1.3 - hurt * 0.9;
+      if (se >= 2) why.push(`super-effective on ${se} of ${bossMons.length} of ${boss.t.replace(/^Gym \d · /, '')}'s Pokémon`);
+      if (hurt >= Math.ceil(bossMons.length / 2)) why.push(`but takes super-effective hits from ${hurt} of them`);
+    }
+    // stats and overlap
+    const bst = m.st.reduce((a, b) => a + b, 0); sc += Math.max(-1.5, Math.min(1.5, (bst - 420) / 100));
+    const ov = tt.filter(t => teamTypes.has(t)).length; sc -= ov * 1.4;
+    if (ov && !why.length) why.push('shares a type with your team');
+    const base = MON.get(baseId); const where = base && base.dav != null ? D.groups[base.dav].name : '';
+    out.push({ m, sc, why: why.slice(0, 2).join('; ') || 'solid stats, no new holes', get: base && base.id !== m.id ? `catch ${base.name} · ${where}` : where });
+  }
+  out.sort((a, b) => b.sc - a.sc);
+  return out.slice(0, 8);
+}
+
 // ---------- SETTINGS ----------
 function renderSettings() {
   topbar('Settings', { back: true });
@@ -378,11 +499,13 @@ function renderSettings() {
     <div class="r"><div><b>Trainers on route pages</b><small>Every trainer and their team</small></div><button class="btn${S.showTr ? ' gold' : ''}" id="stTr">${S.showTr ? 'On' : 'Off'}</button></div>
     <div class="r"><div><b>Items on route pages</b><small>Ground and hidden items</small></div><button class="btn${S.showIt ? ' gold' : ''}" id="stIt">${S.showIt ? 'On' : 'Off'}</button></div>
     <div class="r"><div><b>Cache all sprites</b><small>~11 MB so every picture works offline</small></div><button class="btn" id="stCache">Download</button></div>
+    <div class="r"><div><b>Clear boss checklist</b><small>${Object.keys(S.beaten).length} beaten right now</small></div><button class="btn red" id="stClrB">Clear</button></div>
     <div class="r"><div><b>Clear caught ticks</b><small>${caught} ticked right now</small></div><button class="btn red" id="stClr">Clear</button></div>
     <div class="legend" style="padding-top:1rem">Data: ${h(D.version)}, from luminescent.team. Sprites © Nintendo / Game Freak.</div></div>`;
   $('#stBig').onclick = () => { S.big = !S.big; LS.set('big', S.big); document.documentElement.classList.toggle('big', S.big); render(); };
   $('#stTr').onclick = () => { S.showTr = !S.showTr; LS.set('showTr', S.showTr); render(); };
   $('#stIt').onclick = () => { S.showIt = !S.showIt; LS.set('showIt', S.showIt); render(); };
+  $('#stClrB').onclick = () => { if (confirm('Clear the boss checklist?')) { S.beaten = {}; LS.set('beaten', S.beaten); render(); } };
   $('#stClr').onclick = () => { if (confirm(`Clear all ${caught} caught ticks?`)) { S.caught = {}; LS.set('caught', S.caught); render(); } };
   $('#stCache').onclick = async (e) => {
     e.target.textContent = '0%'; const urls = D.mons.map(m => spr(m)); let done = 0;
